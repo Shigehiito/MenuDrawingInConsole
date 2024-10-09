@@ -36,11 +36,11 @@ namespace MenuForDrawing
 
                         switch (selectedButton)
                         {
-                            case 1: // Az első gomb létrehozza a rajzoló felületet
+                            case 1: 
                                 Console.Clear();
                                 DrawInConsole();
                                 break;
-                            case 4: // A negyedik gomb kilép a programból
+                            case 4: 
                                 Environment.Exit(0);
                                 break;
                         }
