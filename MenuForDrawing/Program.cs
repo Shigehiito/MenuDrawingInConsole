@@ -69,8 +69,11 @@ namespace MenuForDrawing
                                 DrawBorder();
                                 Console.SetCursorPosition(0, Console.WindowHeight - 2);
                                 Console.WriteLine("Add meg a fájl nevét, amiként menteni szeretnéd a rajzot: ");
-                                string savePath = Console.ReadLine();
-                                SaveDrawingToFile(savePath);
+                                string fileName = Console.ReadLine();
+
+                                string folderPath = "C:\\Users\\csany\\source\\repos\\MenuDrawingIntoConsole\\MenuForDrawing\\bin\\Debug\\net8.0\\Drawings"; // specify the correct folder
+                                SaveDrawingToFile(folderPath, fileName);
+
                                 Console.Clear();
                                 DrawBorder();
                                 break;
@@ -101,6 +104,7 @@ namespace MenuForDrawing
                 {
                     string[] files = Directory.GetFiles(folderPath);
                     Console.Clear();
+                    Console.Write(folderPath);
                     Console.WriteLine("Elérhető fájlok:");
 
                     for (int i = 0; i < files.Length; i++)
@@ -172,11 +176,18 @@ namespace MenuForDrawing
         }
 
 
-        static void SaveDrawingToFile(string folderPath)
+        static void SaveDrawingToFile(string folderPath, string fileName)
         {
+            string fullPath = Path.Combine(folderPath, fileName);
+
             try
             {
-                using (StreamWriter writer = new StreamWriter(folderPath))
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                using (StreamWriter writer = new StreamWriter(fullPath))
                 {
                     foreach (var item in trail)
                     {
