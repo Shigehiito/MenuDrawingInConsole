@@ -1,8 +1,29 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace MenuForDrawing
 {
+    // Define the model representing a drawing file
+    public class DrawingFile
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public byte[] Data { get; set; } // Stores the serialized trail data
+    }
+
+    // Define the DbContext for database interaction
+    public class DrawingAppContext : DbContext
+    {
+        public DbSet<DrawingFile> DrawingFiles { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder options)
+            => options.UseSqlite("Data Source=DrawingApp.db"); // SQLite file database
+    }
+
     internal class Program
     {
         static bool hasPreviousDrawing = false;
@@ -10,6 +31,11 @@ namespace MenuForDrawing
 
         static void Main(string[] args)
         {
+            using (var context = new DrawingAppContext())
+            {
+                context.Database.EnsureCreated(); // Ensures the database and tables are created
+            }
+
             Console.CursorVisible = false;
             int selectedButton = 1;
             ConsoleKeyInfo input;
@@ -52,7 +78,6 @@ namespace MenuForDrawing
                             case 3:
                                 if (hasPreviousDrawing)
                                 {
-
                                     Console.Clear();
                                     DrawBorder();
                                     DrawInConsole(true);
@@ -70,10 +95,7 @@ namespace MenuForDrawing
                                 Console.SetCursorPosition(0, Console.WindowHeight - 2);
                                 Console.WriteLine("Add meg a fájl nevét, amiként menteni szeretnéd a rajzot: ");
                                 string fileName = Console.ReadLine();
-
-                                string folderPath = "C:\\Users\\csany\\source\\repos\\MenuDrawingIntoConsole\\MenuForDrawing\\bin\\Debug\\net8.0\\Drawings"; // specify the correct folder
-                                SaveDrawingToFile(folderPath, fileName);
-
+                                SaveDrawingToDatabase(fileName);
                                 Console.Clear();
                                 DrawBorder();
                                 break;
@@ -95,113 +117,220 @@ namespace MenuForDrawing
 
         static void openFolder()
         {
-            Console.SetCursorPosition(0, Console.WindowHeight - 2);
-            string folderPath = "C:\\Users\\csany\\source\\repos\\MenuDrawingIntoConsole\\MenuForDrawing\\bin\\Debug\\net8.0\\Drawings";
-
-            try
+            using (var context = new DrawingAppContext())
             {
-                if (Directory.Exists(folderPath))
+                var files = context.DrawingFiles.ToList();
+                Console.Clear();
+                Console.WriteLine("Elérhető fájlok:");
+
+                for (int i = 0; i < files.Count; i++)
                 {
-                    string[] files = Directory.GetFiles(folderPath);
+                    Console.WriteLine($"{i + 1}. {files[i].Name}");
+                }
+
+                Console.WriteLine("Válaszd ki a fájlt a szám megadásával (vagy nyomd meg az Esc billentyűt a visszatéréshez): ");
+                ConsoleKeyInfo keyInfo = Console.ReadKey();
+
+                if (keyInfo.Key == ConsoleKey.Escape)
+                {
                     Console.Clear();
-                    Console.Write(folderPath);
-                    Console.WriteLine("Elérhető fájlok:");
+                    return;
+                }
 
-                    for (int i = 0; i < files.Length; i++)
-                    {
-                        Console.WriteLine($"{i + 1}. {Path.GetFileName(files[i])}");
-                    }
-
-                    Console.WriteLine("Válaszd ki a fájlt a szám megadásával (vagy nyomd meg az Esc billentyűt a visszatéréshez): ");
-                    ConsoleKeyInfo keyInfo = Console.ReadKey();
-
-                    if (keyInfo.Key == ConsoleKey.Escape)
-                    {
-                        Console.Clear();
-                        return; 
-                    }
-
-                    if (int.TryParse(keyInfo.KeyChar.ToString(), out int fileIndex) && fileIndex > 0 && fileIndex <= files.Length)
-                    {
-                        string selectedFile = files[fileIndex - 1];
-                        LoadDrawingFromFile(selectedFile);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Érvénytelen választás.");
-                    }
+                if (int.TryParse(keyInfo.KeyChar.ToString(), out int fileIndex) && fileIndex > 0 && fileIndex <= files.Count)
+                {
+                    var selectedFile = files[fileIndex - 1];
+                    LoadDrawingFromDatabase(selectedFile.Id);
                 }
                 else
                 {
-                    Console.WriteLine("A megadott mappa nem található.");
+                    Console.WriteLine("Érvénytelen választás.");
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Hiba történt a mappa megnyitása során:");
-                Console.WriteLine(ex.Message);
-            }
-        }
-        static void LoadDrawingFromFile(string folderPath)
-        {
-            try
-            {
-                string[] fileContent = File.ReadAllLines(folderPath);
-
-                Console.Clear();
-                trail.Clear();  
-
-                foreach (var line in fileContent)
-                {
-                    var parts = line.Split(',');
-                    if (parts.Length == 4)
-                    {
-                        int x = int.Parse(parts[0]);
-                        int y = int.Parse(parts[1]);
-                        char character = char.Parse(parts[2]);
-                        ConsoleColor color = (ConsoleColor)Enum.Parse(typeof(ConsoleColor), parts[3]);
-
-                        trail.Add((x, y, character, color));
-                        DrawCharacter(x, y, character, color);
-                    }
-                }
-
-                hasPreviousDrawing = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Hiba történt a fájl beolvasása során:");
-                Console.WriteLine(ex.Message);
             }
         }
 
-
-        static void SaveDrawingToFile(string folderPath, string fileName)
+        static void SaveDrawingToDatabase(string fileName)
         {
-            string fullPath = Path.Combine(folderPath, fileName);
-
-            try
+            using (var context = new DrawingAppContext())
             {
-                if (!Directory.Exists(folderPath))
+                var drawingData = SerializeTrail();
+                var drawingFile = new DrawingFile
                 {
-                    Directory.CreateDirectory(folderPath);
-                }
+                    Name = fileName,
+                    CreatedAt = DateTime.Now,
+                    Data = drawingData
+                };
 
-                using (StreamWriter writer = new StreamWriter(fullPath))
-                {
-                    foreach (var item in trail)
-                    {
-                        writer.WriteLine($"{item.x},{item.y},{item.character},{item.color}");
-                    }
-                }
+                context.DrawingFiles.Add(drawingFile);
+                context.SaveChanges();
                 Console.WriteLine("A rajz sikeresen elmentve.");
             }
-            catch (Exception ex)
+        }
+
+        static void LoadDrawingFromDatabase(int fileId)
+        {
+            using (var context = new DrawingAppContext())
             {
-                Console.WriteLine("Hiba történt a mentés során:");
-                Console.WriteLine(ex.Message);
+                var drawingFile = context.DrawingFiles.Find(fileId);
+                if (drawingFile != null)
+                {
+                    DeserializeTrail(drawingFile.Data);
+                    Console.Clear();
+                    foreach (var item in trail)
+                    {
+                        DrawCharacter(item.x, item.y, item.character, item.color);
+                    }
+                    hasPreviousDrawing = true;
+                }
+                else
+                {
+                    Console.WriteLine("A rajz nem található.");
+                }
             }
         }
+
+        static byte[] SerializeTrail()
+        {
+            using (var ms = new MemoryStream())
+            using (var writer = new BinaryWriter(ms))
+            {
+                foreach (var item in trail)
+                {
+                    writer.Write(item.x);
+                    writer.Write(item.y);
+                    writer.Write(item.character);
+                    writer.Write((int)item.color);
+                }
+                return ms.ToArray();
+            }
+        }
+
+        static void DeserializeTrail(byte[] data)
+        {
+            trail.Clear();
+            using (var ms = new MemoryStream(data))
+            using (var reader = new BinaryReader(ms))
+            {
+                while (ms.Position < ms.Length)
+                {
+                    int x = reader.ReadInt32();
+                    int y = reader.ReadInt32();
+                    char character = reader.ReadChar();
+                    ConsoleColor color = (ConsoleColor)reader.ReadInt32();
+                    trail.Add((x, y, character, color));
+                }
+            }
+        }
+        //static void openFolder()
+        //{
+        //    Console.SetCursorPosition(0, Console.WindowHeight - 2);
+        //    string folderPath = "C:\\Users\\csany\\source\\repos\\MenuDrawingIntoConsole\\MenuForDrawing\\bin\\Debug\\net8.0\\Drawings";
+
+
+        //    try
+        //    {
+        //        if (Directory.Exists(folderPath))
+        //        {
+        //            string[] files = Directory.GetFiles(folderPath);
+        //            Console.Clear();
+        //            Console.Write(folderPath);
+        //            Console.WriteLine("Elérhető fájlok:");
+
+        //            for (int i = 0; i < files.Length; i++)
+        //            {
+        //                Console.WriteLine($"{i + 1}. {Path.GetFileName(files[i])}");
+        //            }
+
+        //            Console.WriteLine("Válaszd ki a fájlt a szám megadásával (vagy nyomd meg az Esc billentyűt a visszatéréshez): ");
+        //            ConsoleKeyInfo keyInfo = Console.ReadKey();
+
+        //            if (keyInfo.Key == ConsoleKey.Escape)
+        //            {
+        //                Console.Clear();
+        //                return; 
+        //            }
+
+        //            if (int.TryParse(keyInfo.KeyChar.ToString(), out int fileIndex) && fileIndex > 0 && fileIndex <= files.Length)
+        //            {
+        //                string selectedFile = files[fileIndex - 1];
+        //                LoadDrawingFromFile(selectedFile);
+        //            }
+        //            else
+        //            {
+        //                Console.WriteLine("Érvénytelen választás.");
+        //            }
+        //        }
+        //        else
+        //        {
+        //            Console.WriteLine("A megadott mappa nem található.");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine("Hiba történt a mappa megnyitása során:");
+        //        Console.WriteLine(ex.Message);
+        //    }
+        //}
+        //static void LoadDrawingFromFile(string folderPath)
+        //{
+        //    try
+        //    {
+        //        string[] fileContent = File.ReadAllLines(folderPath);
+
+        //        Console.Clear();
+        //        trail.Clear();  
+
+        //        foreach (var line in fileContent)
+        //        {
+        //            var parts = line.Split(',');
+        //            if (parts.Length == 4)
+        //            {
+        //                int x = int.Parse(parts[0]);
+        //                int y = int.Parse(parts[1]);
+        //                char character = char.Parse(parts[2]);
+        //                ConsoleColor color = (ConsoleColor)Enum.Parse(typeof(ConsoleColor), parts[3]);
+
+        //                trail.Add((x, y, character, color));
+        //                DrawCharacter(x, y, character, color);
+        //            }
+        //        }
+
+        //        hasPreviousDrawing = true;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine("Hiba történt a fájl beolvasása során:");
+        //        Console.WriteLine(ex.Message);
+        //    }
+        //}
+
+
+        //static void SaveDrawingToFile(string folderPath, string fileName)
+        //{
+        //    string fullPath = Path.Combine(folderPath, fileName);
+
+        //    try
+        //    {
+        //        if (!Directory.Exists(folderPath))
+        //        {
+        //            Directory.CreateDirectory(folderPath);
+        //        }
+
+        //        using (StreamWriter writer = new StreamWriter(fullPath))
+        //        {
+        //            foreach (var item in trail)
+        //            {
+        //                writer.WriteLine($"{item.x},{item.y},{item.character},{item.color}");
+        //            }
+        //        }
+        //        Console.WriteLine("A rajz sikeresen elmentve.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine("Hiba történt a mentés során:");
+        //        Console.WriteLine(ex.Message);
+        //    }
+        //}
         static void DrawBorder()
         {
             Console.Write('╔');
