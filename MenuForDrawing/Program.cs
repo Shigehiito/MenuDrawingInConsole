@@ -221,6 +221,11 @@ namespace MenuForDrawing
                 }
             }
         }
+
+
+        //***************** Folderbe való mentés és betöltés kódja, ha nem akarjuk adatbázisba menteni. *****************
+
+
         //static void openFolder()
         //{
         //    Console.SetCursorPosition(0, Console.WindowHeight - 2);
@@ -356,7 +361,7 @@ namespace MenuForDrawing
             }
         }
 
-        static void DrawButtons(int selectedButton)
+        static void drawbuttons(int selectedbutton)
         {
             string[] buttons = { "Új Felület Nyitása", "Elözö Munka Betöltése", "Rajzolás Folytatása", "Fájl Mentése Másként", "Kilépés" };
 
